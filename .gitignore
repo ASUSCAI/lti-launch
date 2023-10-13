@@ -8,3 +8,5 @@ rebel-remote.xml
 .idea
 *.imi
 *.xmi
+
+.vscode/

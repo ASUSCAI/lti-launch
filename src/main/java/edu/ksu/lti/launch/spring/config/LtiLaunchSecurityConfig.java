@@ -12,12 +12,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.servlet.configuration.EnableWebMvcSecurity;
 import org.springframework.security.oauth.provider.filter.ProtectedResourceProcessingFilter;
 import org.springframework.security.oauth.provider.nonce.InMemoryNonceServices;
 import org.springframework.security.oauth.provider.token.InMemoryProviderTokenServices;
 import org.springframework.security.oauth.provider.token.OAuthProviderTokenServices;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.security.web.header.writers.frameoptions.StaticAllowFromStrategy;
@@ -33,46 +34,51 @@ import java.net.URI;
  * on each request to make browsers happy running inside of an iframe.
  */
 @Configuration
-@EnableWebMvcSecurity
-public class LtiLaunchSecurityConfig extends WebMvcConfigurerAdapter {
+@EnableWebSecurity
+public class LtiLaunchSecurityConfig {
 
     private static final Logger LOG = LogManager.getLogger(LtiLaunchSecurityConfig.class);
 
-    @Configuration
-    @Order(1)
-    public static class LTISecurityConfigurerAdapter extends WebSecurityConfigurerAdapter {
+    // @Configuration
+    // @Order(1)
+    // public static class LTISecurityConfigurerAdapter {
         @Autowired
         private LtiConsumerDetailsService oauthConsumerDetailsService;
         @Autowired
         private LtiOAuthAuthenticationHandler oauthAuthenticationHandler;
-        @Autowired
+        
         private OAuthProviderTokenServices oauthProviderTokenServices;
 
         @Autowired
         private ConfigService configService;
 
-        @Override
-        public void configure(WebSecurity web) throws Exception {
-            //security debugging should not be used in production!
-            //You probably won't even want it in development most of the time but I'll leave it here for reference.
-            /*
-            if(LOG.isDebugEnabled()) {
-                web.debug(true);
-            }
-            */
+        @Autowired
+        public LtiLaunchSecurityConfig() {
+            oauthProviderTokenServices = oauthProviderTokenServices();    
         }
 
-        @Override
-        protected void configure(HttpSecurity http) throws Exception {
+        // @Override
+        // public void configure(WebSecurity web) throws Exception {
+        //     //security debugging should not be used in production!
+        //     //You probably won't even want it in development most of the time but I'll leave it here for reference.
+        //     /*
+        //     if(LOG.isDebugEnabled()) {
+        //         web.debug(true);
+        //     }
+        //     */
+        // }
+
+        @Bean
+        public SecurityFilterChain configure(HttpSecurity http) throws Exception {
             LOG.debug("configuring HttpSecurity");
             String canvasUrl = configService.getConfigValue("canvas_url");
             if (StringUtils.isBlank(canvasUrl)) {
                 throw new RuntimeException("Missing canvas_url config value");
             }
-            http.requestMatchers()
-                .antMatchers("/launch").and()
+            http
+                .authorizeRequests()
+                    .anyRequest().authenticated().and().csrf().disable()
                 .addFilterBefore(configureProcessingFilter(), UsernamePasswordAuthenticationFilter.class)
-                .authorizeRequests().anyRequest().authenticated().and().csrf().disable()
                 .headers().addHeaderWriter(new XFrameOptionsHeaderWriter(new StaticAllowFromStrategy(new URI(canvasUrl))))
                 .addHeaderWriter(new StaticHeadersWriter("Content-Security-Policy",
                         "default-src 'self' https://s.ksucloud.net https://*.instructure.com; " +
@@ -80,6 +86,7 @@ public class LtiLaunchSecurityConfig extends WebMvcConfigurerAdapter {
                         "script-src 'self' 'unsafe-inline' https://ajax.googleapis.com; " +
                         "style-src 'self' 'unsafe-inline' https://*.instructure.com https://www.k-state.edu" ))
                 .addHeaderWriter(new StaticHeadersWriter("P3P", "CP=\"This is just to make IE happy with cookies in this iframe\""));
+            return http.build();
         }
 
         private ProtectedResourceProcessingFilter configureProcessingFilter() {
@@ -94,9 +101,10 @@ public class LtiLaunchSecurityConfig extends WebMvcConfigurerAdapter {
             processingFilter.setTokenServices(oauthProviderTokenServices);
             return processingFilter;
         }
-    }
-
-    @Bean(name = "oauthProviderTokenServices")
+    // }
+    
+    
+    // @Bean(name = "oauthProviderTokenServices")
     public OAuthProviderTokenServices oauthProviderTokenServices() {
         // NOTE: we don't use the OAuthProviderTokenServices for 0-legged but it cannot be null
         return new InMemoryProviderTokenServices();
